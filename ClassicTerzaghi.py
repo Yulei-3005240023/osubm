@@ -5,8 +5,8 @@ class ClassicTerzaghi(su.SubsidenceModel):
     """
     这个类代表经典太沙基理论，不用考虑变渗透系数，要保证经典的原汁原味
     """
-    def __init__(self, cv=None, mv=1e-8, L=10,  N = 21, T = 10, dt = 0.5, u0 = 98100, K = 1):
-        super().__init__(L = L, N = N, T = T, dt = dt, u0 = u0)
+    def __init__(self, cv=None, mv=1e-6, L=10,  N = 21, T = 10, dt = 0.5, K = 1):
+        super().__init__(L = L, N = N, T = T, dt = dt)
         self.name_chinese = '经典太沙基一维固结'
         self.cv = cv # 固结系数 (m²/day)
         self.mv = mv  # 压缩系数 (1/Pa)

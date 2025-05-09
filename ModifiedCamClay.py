@@ -3,8 +3,8 @@ import subsicence as su
 
 
 class ModifiedCamClay(su.SubsidenceModel):
-    def __init__(self, L=10, N=11, T=3, dt=0.1, K=0.001, u0=98100, w=0):
-        super().__init__(L=L, N=N, T=T, dt=dt, u0=u0)
+    def __init__(self, L=10, N=11, T=3, dt=0.1, K=0.001, w=0):
+        super().__init__(L=L, N=N, T=T, dt=dt)
         self.name_chinese = '修正的剑桥模型'
         # 参数设置
         self.M_ = 1.2  # 临界状态线斜率

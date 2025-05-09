@@ -12,7 +12,7 @@ class SubsidenceModel:
     6 由于水位波动所以引起的土层沉降或者抬升
     """
     # 在这个父类中只存放与计算有关的边界条件与有限差分法设置，水文地质与土力学参数等全部放在子类中
-    def __init__(self, L = 10.0, N = 10, T = 10, dt = 0.5, u0 = 0, delta_pwp = 98100, z0=40, external_load=0):
+    def __init__(self, L = 10.0, N = 10, T = 10, dt = 0.5, delta_pwp = 98100, z0=40, external_load=0):
         self.name_chinese = "一维土柱沉降模拟"
         # 土水性质参数
         self.rw = 9810 # 水的容重(N/m^3)
@@ -35,7 +35,6 @@ class SubsidenceModel:
 
         # 应力/孔压pore water pressure相关变量
         self.Delta_pwp = np.zeros(self.M) #这个外加的应力会以孔压的形式全额添加到上边界条件上！！！！考虑了半天还是这个方法比较好
-        self.u0 = u0 # 初始最高位置，L=0位置的孔隙水压力
         self.external_load = external_load # 初始加荷
         self.delta_pwp0 = delta_pwp
         self.Delta_pwp[0] = self.delta_pwp0 # 施加荷载 (Pa)
