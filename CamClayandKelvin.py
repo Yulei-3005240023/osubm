@@ -1,20 +1,27 @@
 import numpy as np
 import subsicence as su
+'''
+推出一个新模型，由剑桥模型融合开尔文模型组成
+能够反应弹塑性的主固结性质和粘弹性的流变性质
 
 
-class ModifiedCamClay(su.SubsidenceModel):
+'''
+class CamClayandKelvin(su.SubsidenceModel):
     def __init__(self, L=10, N=11, T=3, dt=0.1, K=0.001, w=0):
         super().__init__(L=L, N=N, T=T, dt=dt)
-        self.name_chinese = '修正的剑桥模型'
+        self.name_chinese = '剑桥模型融合流变过程'
         # 参数设置
         self.M_ = 1.2  # 临界状态线斜率
         self.lam = 1  # 压缩指数
         self.kappa = 0.5  # 回弹指数    这两个指数根据e~lnp,e~logp,sigma~lnp,sigma~logp有关
+        self.E = 1e7
+        self.phi = 1e9
         self.e0 = 1.5  # 初始孔隙比
         self.K = float(K)  # 初始渗透系数 m/d 这个float不加上会出大问题
         self.K_list = np.full(self.N, self.K)
         self.w = w  # 源汇项，默认为0
         self.e = np.full(self.N, self.e0)  # 孔隙比数组
+        self.epsilon = np.zeros((self.M, self.N))  # 分时刻每一个位置的应变储存
 
     def solve(self, Hydraulic_Head=False):
         # 初始化数组
@@ -51,6 +58,10 @@ class ModifiedCamClay(su.SubsidenceModel):
             A = np.zeros((self.N, self.N))
             # 构建常数矩阵
             b = np.zeros(self.N)
+            delta_epsilon_initial = np.zeros(self.M)
+            delta_epsilon_initial1 = np.zeros(self.M) # 主固结应变存储
+            delta_epsilon_initial2 = np.zeros(self.M) # 次固结应变存储
+            epsilon_initial = np.copy(self.epsilon[m - 1])
             while True:
                 # 开始矩阵赋值,迭代计算
                 for i in range(1, self.N - 1):
@@ -66,8 +77,10 @@ class ModifiedCamClay(su.SubsidenceModel):
                             self.sigma_total[i] - u_prev[i]) / self.dt)
                     A[i, i + 1] = ki0 / self.dz ** 2
                     # 常数矩阵赋值
-                    b[i] = self.rw * (-lamorkappa / (self.sigma_total[i] - u_prev[i]) * self.u[i] / self.dt + ki0 / self.dz
-                                      - ki1 / self.dz - self.w)  # 此处ki0与ki1需要根据Z轴方向调整，此处默认Z轴方向向下
+                    b[i] = self.rw * (-lamorkappa / (self.sigma_total[i] - u_prev[i]) * self.u[i] / self.dt -
+                                      (self.u[i]- u_prev[i])/self.phi +
+                                      self.E/self.phi * (delta_epsilon_initial[i]-delta_epsilon_initial1[i])+
+                                      ki0 / self.dz- ki1 / self.dz - self.w)  # 此处ki0与ki1需要根据Z轴方向调整，此处默认Z轴方向向下
 
                 # 边界条件赋值
                 A, b = self.boundary_violation(A=A, b=b, m=m)
@@ -82,15 +95,25 @@ class ModifiedCamClay(su.SubsidenceModel):
                 for i in range(self.N):
                     if sigma_v_new[i] < p_c[i]:  # 单一时间步内预固结应力不变
                         if sigma_v0[i] < p_c[i]:
-                            delta_e = (self.kappa / (1 + self.e0)) * np.log(sigma_v_new[i] / sigma_v0[i])  # 回弹与再压缩过程
+                            delta_e1 = (self.kappa / (1 + self.e0)) * np.log(sigma_v_new[i] / sigma_v0[i])  # 回弹与再压缩过程
                         else:
-                            delta_e = (self.kappa / (1 + self.e0)) * np.log(sigma_v_new[i] / p_c[i])  # 回弹与再压缩过程
+                            delta_e1 = (self.kappa / (1 + self.e0)) * np.log(sigma_v_new[i] / p_c[i])  # 回弹与再压缩过程
                     else:
-                        delta_e_elastic = (self.kappa / (1 + self.e0)) * np.log(p_c[i] / sigma_v0[i])
-                        delta_e_plastic = (self.lam / (1 + self.e0)) * np.log(sigma_v_new[i] / p_c[i])
-                        delta_e = delta_e_elastic + delta_e_plastic
+                        delta_e1_elastic = (self.kappa / (1 + self.e0)) * np.log(p_c[i] / sigma_v0[i])
+                        delta_e1_plastic = (self.lam / (1 + self.e0)) * np.log(sigma_v_new[i] / p_c[i])
+                        delta_e1 = delta_e1_elastic + delta_e1_plastic
+                        delta_epsilon_initial1[i] = delta_e1*(1 + self.e0) # 主固结应变储存
                         p_c_initial[i] = sigma_v_new[i]  # 暂时保存更新，待收敛后应用
-                    e_initial[i] -= delta_e
+                    e_initial[i] -= delta_e1 # 由主固结影响的孔隙比变化
+
+                    aa = (sigma_v_new[i]-sigma_v0[i])/self.phi
+                    bb = -self.E / self.phi * (delta_epsilon_initial[i]-delta_epsilon_initial1[i])
+                    delta_epsilon_initial2[i] = (aa + bb) * self.dt
+                    epsilon_initial[i] = self.epsilon[m - 1][i] + delta_epsilon_initial1[i] + delta_epsilon_initial2[i]
+                    delta_e2 = delta_epsilon_initial2[i] * (1 + self.e0)
+                    delta_epsilon_initial[i] = delta_epsilon_initial1[i] + delta_epsilon_initial2[i]
+                    e_initial[i] -= delta_e2
+                    delta_e = delta_e1 + delta_e2
                     delta_h = delta_e * self.dz / (1 + self.e0)  # 以沉降为正
                     delta_h_total += delta_h
 
@@ -119,6 +142,7 @@ class ModifiedCamClay(su.SubsidenceModel):
             cum_settlement += delta_h_total
             settlement_history.append(delta_h_total)
             sigma_v0 = np.copy(sigma_v_new)  # 前一时刻有效应力
+            self.epsilon[m, :] = epsilon_initial
 
             # 转换为水头输出
             h_list = np.zeros(self.N)
